@@ -2,15 +2,26 @@ import streamlit as st
 from transformers import pipeline
 import pandas as pd
 import sqlite3
+import logging  # Nueva: Para depuración
+
+# Configurar logging
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 # -----------------------
-# Autenticación (simple)
+# Autenticación
 # -----------------------
-
 def login_screen():
     st.header("Esta app es privada")
     st.subheader("Por favor, inicia sesión")
-    st.button("Iniciar sesión con Google", on_click=st.login)
+    try:
+        if st.button("Iniciar sesión con Google"):
+            logger.debug("Iniciando autenticación OIDC")
+            st.login()
+            logger.debug("Esperando callback en /oauth2callback")
+    except Exception as e:
+        logger.error("Error en autenticación: %s", e)
+        st.error(f"Error al iniciar sesión: {e}. Verifica la configuración OIDC en secrets.toml o el redirect URI.")
 
 if not getattr(st, "user", None) or not getattr(st.user, "is_logged_in", False):
     login_screen()
@@ -18,14 +29,14 @@ if not getattr(st, "user", None) or not getattr(st.user, "is_logged_in", False):
 
 user_email = getattr(st.user, "email", None) or getattr(st.user, "name", None) or "usuario@desconocido"
 st.sidebar.success(f"Bienvenido, {user_email}!")
+
 if st.sidebar.button("Logout"):
+    logger.debug("Usuario %s cerró sesión", user_email)
     st.logout()
-    st.experimental_rerun()
 
 # -----------------------
 # App principal
 # -----------------------
-
 # DB
 DB_PATH = "historial.db"
 conn = sqlite3.connect(DB_PATH)
@@ -76,6 +87,7 @@ if st.button("Analizar Sentimiento"):
     else:
         st.warning("Introduce al menos una frase.")
 
+# Mostrar historial
 st.subheader("Tu Historial de Análisis")
 cursor.execute("SELECT frase, sentimiento, confianza, timestamp FROM analisis WHERE user_email = ? ORDER BY timestamp DESC", (user_email,))
 historial = cursor.fetchall()
@@ -85,4 +97,5 @@ if historial:
 else:
     st.info("No hay historial aún.")
 
+# Cerrar DB
 conn.close()
